@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=0.85, maximum-scale=1.0"/>
   <title>TV Ao Vivo</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
@@ -105,6 +105,42 @@
     .flex1{flex:1;}
     .hd-tag{background:var(--red);color:#fff;font-size:10px;font-weight:700;letter-spacing:1px;padding:3px 7px;border-radius:3px;text-transform:uppercase;}
 
+
+
+    /* BANNER NOME DO CANAL */
+    .ch-banner{
+      position:absolute;top:14px;left:50%;transform:translateX(-50%);
+      background:rgba(0,0,0,.72);backdrop-filter:blur(10px);
+      border:1px solid rgba(255,255,255,.12);border-radius:12px;
+      padding:8px 18px;display:flex;align-items:center;gap:10px;
+      opacity:0;transition:opacity .4s;pointer-events:none;
+      white-space:nowrap;z-index:11;
+    }
+    .ch-banner.visible{opacity:1;}
+    .ch-banner-num{
+      font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;
+      color:var(--yellow);line-height:1;
+    }
+    .ch-banner-sep{width:1px;height:28px;background:rgba(255,255,255,.2);}
+    .ch-banner-icon{font-size:20px;line-height:1;}
+    .ch-banner-name{
+      font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;
+      color:#fff;line-height:1;
+    }
+    /* SETAS DE CANAL */
+    .nav-arrow{
+      position:absolute;top:50%;transform:translateY(-50%);
+      background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);
+      border-radius:50%;width:52px;height:52px;
+      display:flex;align-items:center;justify-content:center;
+      cursor:pointer;color:#fff;font-size:22px;
+      backdrop-filter:blur(8px);
+      transition:background .2s,transform .15s;
+      z-index:10;flex-shrink:0;
+    }
+    .nav-arrow:hover{background:var(--red);transform:translateY(-50%) scale(1.1);}
+    .nav-prev{left:12px;}
+    .nav-next{right:12px;}
     /* LOADING */
     .status-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(0,0,0,.78);backdrop-filter:blur(4px);}
     .spinner{width:42px;height:42px;border:3px solid rgba(255,255,255,.1);border-top-color:var(--red);border-radius:50%;animation:spin .8s linear infinite;}
@@ -158,6 +194,9 @@
         <span class="status-text" id="statusTxt">Carregando sinal...</span>
       </div>
       <div class="player-overlay" id="playerOverlay">
+        <div class="ch-banner" id="chBanner"><span class="ch-banner-num" id="bannerNum"></span><div class="ch-banner-sep"></div><span class="ch-banner-name" id="bannerName"></span></div>
+        <button class="nav-arrow nav-prev" onclick="prevChannel(event)" title="Canal anterior">&#10094;</button>
+        <button class="nav-arrow nav-next" onclick="nextChannel(event)" title="Próximo canal">&#10095;</button>
         <div class="controls">
           <button class="ctrl-btn" id="playBtn" onclick="togglePlay()">&#9654;</button>
           <button class="ctrl-btn" id="muteBtn" onclick="toggleMute()">&#128266;</button>
@@ -165,6 +204,7 @@
           <div class="flex1"></div>
           <span class="hd-tag">HD</span>
           <button class="ctrl-btn" onclick="castToTV()" title="Transmitir para TV">&#128253;</button>
+          <button class="ctrl-btn" onclick="mirrorScreen()" title="Espelhar tela">&#128227;</button>
           <button class="ctrl-btn" onclick="toggleFS()">&#9633;</button>
         </div>
       </div>
@@ -184,72 +224,23 @@
 </div>
 
 <!-- CAST MODAL -->
-<div id="castModal" style="
-  display:none;position:fixed;inset:0;z-index:500;
-  background:rgba(0,0,0,.7);backdrop-filter:blur(6px);
-  align-items:flex-end;justify-content:center;
-">
-  <div style="
-    background:#181818;border-radius:18px 18px 0 0;
-    padding:24px 20px 32px;width:100%;max-width:480px;
-    border-top:1px solid rgba(255,255,255,.08);
-  ">
+<div id="castModal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#181818;border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:22px;width:100%;max-width:360px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:3px;color:#fff;">TRANSMITIR PARA</div>
+      <span style="font-size:15px;font-weight:700;color:#fff;letter-spacing:1px;">&#128250; TRANSMITIR PARA TV</span>
       <button onclick="closeCast()" style="background:rgba(255,255,255,.1);border:none;color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:16px;">&#10005;</button>
     </div>
-
-    <!-- Web Video Cast -->
-    <div class="cast-option" onclick="castWebVideoCast()" style="display:flex;align-items:center;gap:14px;padding:14px;background:rgba(255,255,255,.05);border-radius:12px;margin-bottom:10px;cursor:pointer;border:1px solid rgba(255,255,255,.07);">
-      <div style="width:42px;height:42px;background:linear-gradient(135deg,#e91e63,#9c27b0);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;">📡</div>
-      <div>
-        <div style="font-size:14px;font-weight:600;color:#fff;">Web Video Cast</div>
-        <div style="font-size:11px;color:#666;margin-top:2px;">Transmite direto para sua TV LG / Smart TV</div>
+    <div onclick="castWebVideoCast()" style="display:flex;align-items:center;gap:14px;padding:16px;background:rgba(255,255,255,.06);border-radius:14px;cursor:pointer;border:1px solid rgba(255,255,255,.12);active:background:rgba(255,255,255,.12);">
+      <div style="width:48px;height:48px;background:linear-gradient(135deg,#e91e63,#9c27b0);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">&#128225;</div>
+      <div style="flex:1;">
+        <div style="font-size:15px;font-weight:700;color:#fff;">Compartilhar para TV</div>
+        <div style="font-size:12px;color:#aaa;margin-top:3px;">Toca aqui → escolha Web Video Cast</div>
       </div>
-    </div>
-
-    <!-- Chromecast / Google Cast -->
-    <div id="castGoogleWrap">
-      <div class="cast-option" onclick="castGoogle()" style="display:flex;align-items:center;gap:14px;padding:14px;background:rgba(255,255,255,.05);border-radius:12px;margin-bottom:10px;cursor:pointer;border:1px solid rgba(255,255,255,.07);">
-        <div style="width:42px;height:42px;background:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;">📺</div>
-        <div>
-          <div style="font-size:14px;font-weight:600;color:#fff;">Google Cast / Chromecast</div>
-          <div style="font-size:11px;color:#666;margin-top:2px;">Android TV, Chromecast, TV com Cast</div>
-        </div>
-        <div id="castGoogleStatus" style="margin-left:auto;font-size:11px;color:#666;"></div>
-      </div>
-    </div>
-
-    <!-- AirPlay (iOS/Safari) -->
-    <div class="cast-option" onclick="castAirPlay()" style="display:flex;align-items:center;gap:14px;padding:14px;background:rgba(255,255,255,.05);border-radius:12px;margin-bottom:10px;cursor:pointer;border:1px solid rgba(255,255,255,.07);">
-      <div style="width:42px;height:42px;background:linear-gradient(135deg,#555,#333);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;">🍎</div>
-      <div>
-        <div style="font-size:14px;font-weight:600;color:#fff;">AirPlay</div>
-        <div style="font-size:11px;color:#666;margin-top:2px;">Apple TV, Mac, iPhone na mesma rede</div>
-      </div>
-    </div>
-
-    <!-- Compartilhar link (Web Share API) -->
-    <div class="cast-option" onclick="shareStream()" style="display:flex;align-items:center;gap:14px;padding:14px;background:rgba(255,255,255,.05);border-radius:12px;margin-bottom:10px;cursor:pointer;border:1px solid rgba(255,255,255,.07);">
-      <div style="width:42px;height:42px;background:linear-gradient(135deg,#0077ff,#00c6ff);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;">🔗</div>
-      <div>
-        <div style="font-size:14px;font-weight:600;color:#fff;">Compartilhar Stream</div>
-        <div style="font-size:11px;color:#666;margin-top:2px;">Copiar link do canal para abrir em outro app</div>
-      </div>
-    </div>
-
-    <!-- Abrir no VLC -->
-    <div class="cast-option" onclick="openVLC()" style="display:flex;align-items:center;gap:14px;padding:14px;background:rgba(255,255,255,.05);border-radius:12px;cursor:pointer;border:1px solid rgba(255,255,255,.07);">
-      <div style="width:42px;height:42px;background:linear-gradient(135deg,#ff7900,#ffb300);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;">▶</div>
-      <div>
-        <div style="font-size:14px;font-weight:600;color:#fff;">Abrir no VLC</div>
-        <div style="font-size:11px;color:#666;margin-top:2px;">Abre o stream no app VLC instalado</div>
-      </div>
+      <span style="font-size:22px;color:#555;">&#10095;</span>
     </div>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
 
 <script>
 (function(){
@@ -1178,6 +1169,20 @@ function playChannel(idx) {
   }
 }
 
+
+/* ── BANNER NOME DO CANAL ── */
+var bannerTimer = null;
+function showChannelBanner(ch) {
+  var banner = document.getElementById("chBanner");
+  document.getElementById("bannerNum").textContent = ch.num;
+  document.getElementById("bannerName").textContent = ch.name;
+  banner.classList.add("visible");
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(function() {
+    banner.classList.remove("visible");
+  }, 5000);
+}
+
 /* ── UI ── */
 function updateUI(ch) {
   var lb = document.getElementById("chLogoBox");
@@ -1187,6 +1192,7 @@ function updateUI(ch) {
   document.getElementById("chName").textContent = ch.name;
   document.getElementById("chDesc").textContent = ch.desc;
   document.getElementById("headerChName").textContent = ch.num + " • " + ch.name;
+  showChannelBanner(ch);
   buildChList();
 }
 
@@ -1228,6 +1234,9 @@ function showOverlayControls() {
   ov.classList.add("visible");
   overlayVisible = true;
   clearTimeout(hideTimer);
+  // Mostra o banner do canal junto com os controles
+  var ch = CHANNELS[curIdx];
+  if (ch) showChannelBanner(ch);
   hideTimer = setTimeout(function() {
     ov.classList.remove("visible");
     overlayVisible = false;
@@ -1241,13 +1250,58 @@ function hideOverlayControls() {
 }
 
 document.getElementById("playerWrap").addEventListener("click", function(e) {
-  if (e.target.closest(".ctrl-btn") || e.target.closest(".vol-slider")) return;
+  if (e.target.closest(".ctrl-btn") || e.target.closest(".vol-slider") || e.target.closest(".nav-arrow")) return;
   if (overlayVisible) {
     hideOverlayControls();
   } else {
     showOverlayControls();
   }
 });
+
+
+/* ── NAVEGAÇÃO POR SETAS ── */
+window.prevChannel = function(e) {
+  if (e) e.stopPropagation();
+  var idx = (curIdx - 1 + CHANNELS.length) % CHANNELS.length;
+  playChannel(idx);
+  showOverlayControls();
+};
+window.nextChannel = function(e) {
+  if (e) e.stopPropagation();
+  var idx = (curIdx + 1) % CHANNELS.length;
+  playChannel(idx);
+  showOverlayControls();
+};
+
+/* ── ESPELHAR TELA (Presentation API / Screen Cast nativo) ── */
+window.mirrorScreen = function() {
+  // Tenta Presentation API (funciona em TVs com Chromecast/WiDi/Miracast via Chrome)
+  if (navigator.presentation && navigator.presentation.defaultRequest) {
+    navigator.presentation.defaultRequest.start().catch(function(){});
+    return;
+  }
+  // Tenta requestPictureInPicture no video
+  var vid = document.getElementById("video");
+  if (document.pictureInPictureEnabled && !document.pictureInPictureElement) {
+    vid.requestPictureInPicture().catch(function(){});
+    showToast("Picture-in-Picture ativado");
+    return;
+  }
+  if (document.pictureInPictureElement) {
+    document.exitPictureInPicture();
+    return;
+  }
+  // Fallback: compartilha a URL via Web Share API
+  var ch = CHANNELS[curIdx];
+  if (navigator.share) {
+    navigator.share({
+      title: ch.name + " - Ao Vivo",
+      url: ch.url
+    }).catch(function(){});
+  } else {
+    showToast("Use o menu Cast do seu navegador para transmitir");
+  }
+};
 
 /* ── CAST / TRANSMITIR ── */
 var castSession = null;
@@ -1273,29 +1327,6 @@ function getCurrentStreamUrl() {
   return CHANNELS[curIdx].url;
 }
 
-// ── WEB VIDEO CAST ──
-window.castWebVideoCast = function() {
-  var ch = CHANNELS[curIdx];
-  var url = ch.url;
-  // URI scheme do Web Video Cast
-  var wvcUri = "webvideocast://cast?url=" + encodeURIComponent(url) + "&title=" + encodeURIComponent(ch.name + " - Ao Vivo");
-  // Tenta abrir o app diretamente
-  var opened = false;
-  var iframe = document.createElement("iframe");
-  iframe.style.display = "none";
-  iframe.src = wvcUri;
-  document.body.appendChild(iframe);
-  setTimeout(function() { document.body.removeChild(iframe); }, 1000);
-
-  // Fallback: tenta via intent Android
-  var intentUri = "intent://cast?url=" + encodeURIComponent(url) + "&title=" + encodeURIComponent(ch.name) + "#Intent;scheme=webvideocast;package=com.instantbits.cast.webvideo;end";
-  setTimeout(function() {
-    window.location.href = intentUri;
-  }, 300);
-
-  closeCast();
-  showToast("Abrindo Web Video Cast...");
-};
 // ── GOOGLE CAST (Chromecast / Android TV) ──
 function initGoogleCast() {
   if (typeof chrome !== "undefined" && chrome.cast && chrome.cast.isAvailable) {
@@ -1435,8 +1466,39 @@ window.addEventListener("load", function() {
   showOverlayControls();
 });
 
+// ── WEB VIDEO CAST ──
+window.castWebVideoCast = function() {
+  var ch = CHANNELS[curIdx];
+  var url = ch.url;
+  closeCast();
+
+  if (navigator.share) {
+    navigator.share({
+      title: ch.name + " - Ao Vivo",
+      text: url,
+      url: url
+    }).catch(function(e) {
+      if (e.name !== "AbortError") doCopyAndOpen(url);
+    });
+    return;
+  }
+  doCopyAndOpen(url);
+};
+
+function doCopyAndOpen(url) {
+  var ta = document.createElement("textarea");
+  ta.value = url;
+  ta.style.cssText = "position:fixed;opacity:0;top:0;left:0;width:1px;height:1px;";
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try { document.execCommand("copy"); } catch(e) {}
+  document.body.removeChild(ta);
+  showToast("URL copiada! Abra o Web Video Cast e cole na barra de navegacao");
+}
+
 
 })();
 </script>
 </body>
 </html>
+
