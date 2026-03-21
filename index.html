@@ -1,0 +1,1642 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=0.85, maximum-scale=1.0"/>
+  <title>TV Ao Vivo</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root{
+      --red:#e8001c;--yellow:#ffd100;
+      --dark:#090909;--surf:#111;--surf2:#181818;--surf3:#222;
+      --border:rgba(255,255,255,0.07);--text:#f0f0f0;--muted:#555;
+      --menu-w:300px;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{background:var(--dark);color:var(--text);font-family:'Barlow',sans-serif;min-height:100vh;overflow-x:hidden;}
+
+    /* HEADER */
+    header{
+      position:fixed;top:0;left:0;right:0;z-index:300;
+      background:rgba(9,9,9,.98);border-bottom:1px solid var(--border);
+      height:52px;padding:0 14px;display:flex;align-items:center;gap:12px;
+    }
+    .menu-btn{
+      background:none;border:none;cursor:pointer;
+      display:flex;flex-direction:column;gap:5px;padding:6px;flex-shrink:0;
+    }
+    .menu-btn span{display:block;width:22px;height:2px;background:#fff;border-radius:2px;transition:all .3s;transform-origin:center;}
+    .menu-btn.open span:nth-child(1){transform:translateY(7px) rotate(45deg);}
+    .menu-btn.open span:nth-child(2){opacity:0;}
+    .menu-btn.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg);}
+    .app-logo{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:4px;color:#fff;flex-shrink:0;}
+    .app-logo span{color:var(--red);}
+    .live-pill{
+      display:flex;align-items:center;gap:5px;
+      background:rgba(232,0,28,.12);border:1px solid rgba(232,0,28,.3);
+      padding:3px 9px;border-radius:20px;
+      font-size:10px;font-weight:700;letter-spacing:2px;color:var(--red);text-transform:uppercase;flex-shrink:0;
+    }
+    .live-dot{width:6px;height:6px;border-radius:50%;background:var(--red);animation:pulse 1.5s infinite;}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(1.6);}}
+    .hdr-spacer{flex:1;}
+    .now-ch-badge{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;}
+
+    /* CHANNEL MENU */
+    .menu-overlay{position:fixed;inset:0;z-index:250;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .3s;}
+    .menu-overlay.open{opacity:1;pointer-events:all;}
+    .ch-menu{
+      position:fixed;top:0;left:0;bottom:0;z-index:260;width:var(--menu-w);
+      background:var(--surf);border-right:1px solid var(--border);
+      display:flex;flex-direction:column;
+      transform:translateX(-100%);transition:transform .32s cubic-bezier(.4,0,.2,1);
+    }
+    .ch-menu.open{transform:translateX(0);}
+    .ch-menu-hdr{
+      padding:0 16px;height:52px;display:flex;align-items:center;gap:10px;
+      border-bottom:1px solid var(--border);flex-shrink:0;
+    }
+    .ch-menu-hdr::before{content:'';display:block;width:3px;height:16px;background:var(--red);border-radius:2px;}
+    .ch-menu-hdr h2{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:3px;color:var(--muted);}
+    .ch-list{flex:1;overflow-y:auto;padding:8px 0;}
+    .ch-list::-webkit-scrollbar{width:4px;}
+    .ch-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+    .ch-item{
+      display:flex;align-items:center;gap:14px;padding:13px 16px;
+      cursor:pointer;border-left:3px solid transparent;
+      transition:background .18s;border-bottom:1px solid var(--border);
+    }
+    .ch-item:hover{background:var(--surf2);}
+    .ch-item.active{background:rgba(232,0,28,.08);border-left-color:var(--red);}
+    .ch-badge{width:48px;height:48px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:10px;letter-spacing:1px;text-align:center;line-height:1.2;padding:4px;flex-shrink:0;}
+    .ch-item-info{flex:1;min-width:0;}
+    .ch-item-info h3{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .ch-item-info p{font-size:11px;color:var(--muted);margin-top:2px;}
+    .ch-num-tag{font-size:11px;font-weight:700;color:var(--muted);background:var(--surf3);padding:3px 7px;border-radius:4px;flex-shrink:0;font-family:'Bebas Neue',sans-serif;letter-spacing:1px;}
+    .ch-item.active .ch-num-tag{background:var(--red);color:#fff;}
+
+    /* LAYOUT */
+    .app{padding-top:52px;display:grid;grid-template-columns:1fr;min-height:100vh;}
+    .player-zone{display:flex;flex-direction:column;}
+
+    /* PLAYER */
+    .player-wrap{position:relative;background:#000;aspect-ratio:16/9;width:100%;overflow:hidden;}
+    #video{width:100%;height:100%;display:block;background:#000;}
+    .player-overlay{
+      position:absolute;inset:0;
+      opacity:0;
+      transition:opacity .4s;
+      background:linear-gradient(to top,rgba(0,0,0,.88) 0%,transparent 55%);
+      display:flex;flex-direction:column;justify-content:flex-end;padding:13px;
+      cursor:pointer;
+    }
+    .player-overlay.visible{opacity:1;}
+    .controls{display:flex;align-items:center;gap:9px;}
+    .ctrl-btn{
+      background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.15);
+      border-radius:50%;width:42px;height:42px;display:flex;align-items:center;justify-content:center;
+      cursor:pointer;color:#fff;font-size:16px;transition:background .2s,transform .15s;
+      backdrop-filter:blur(6px);flex-shrink:0;
+    }
+    .ctrl-btn:hover{background:var(--red);transform:scale(1.1);}
+    .vol-slider{-webkit-appearance:none;appearance:none;width:65px;height:4px;background:rgba(255,255,255,.25);border-radius:2px;outline:none;cursor:pointer;}
+    .vol-slider::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--yellow);cursor:pointer;}
+    .flex1{flex:1;}
+    .hd-tag{background:var(--red);color:#fff;font-size:10px;font-weight:700;letter-spacing:1px;padding:3px 7px;border-radius:3px;text-transform:uppercase;}
+
+
+
+    /* BANNER NOME DO CANAL */
+    .ch-banner{
+      position:absolute;top:14px;left:50%;transform:translateX(-50%);
+      background:rgba(0,0,0,.72);backdrop-filter:blur(10px);
+      border:1px solid rgba(255,255,255,.12);border-radius:12px;
+      padding:8px 18px;display:flex;align-items:center;gap:10px;
+      opacity:0;transition:opacity .4s;pointer-events:none;
+      white-space:nowrap;z-index:11;
+    }
+    .ch-banner.visible{opacity:1;}
+    .ch-banner-num{
+      font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;
+      color:var(--yellow);line-height:1;
+    }
+    .ch-banner-sep{width:1px;height:28px;background:rgba(255,255,255,.2);}
+    .ch-banner-icon{font-size:20px;line-height:1;}
+    .ch-banner-name{
+      font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;
+      color:#fff;line-height:1;
+    }
+    /* SETAS DE CANAL */
+    .nav-arrow{
+      position:absolute;top:50%;transform:translateY(-50%);
+      background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);
+      border-radius:50%;width:52px;height:52px;
+      display:flex;align-items:center;justify-content:center;
+      cursor:pointer;color:#fff;font-size:22px;
+      backdrop-filter:blur(8px);
+      transition:background .2s,transform .15s;
+      z-index:10;flex-shrink:0;
+    }
+    .nav-arrow:hover{background:var(--red);transform:translateY(-50%) scale(1.1);}
+    .nav-prev{left:12px;}
+    .nav-next{right:12px;}
+    /* LOADING */
+    .status-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(0,0,0,.78);backdrop-filter:blur(4px);}
+    .spinner{width:42px;height:42px;border:3px solid rgba(255,255,255,.1);border-top-color:var(--red);border-radius:50%;animation:spin .8s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .status-text{font-size:12px;color:rgba(255,255,255,.45);letter-spacing:1px;text-transform:uppercase;font-weight:600;}
+
+    /* CHANNEL INFO */
+    .channel-info{padding:15px 17px;background:var(--surf);border-bottom:1px solid var(--border);}
+    .ch-header{display:flex;align-items:center;gap:13px;margin-bottom:11px;}
+    .ch-logo-box{width:50px;height:50px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:10px;letter-spacing:1px;text-align:center;line-height:1.2;padding:5px;border:1px solid var(--border);}
+    .ch-meta h1{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;line-height:1;color:#fff;}
+    .ch-meta p{font-size:12px;color:var(--muted);margin-top:3px;}
+    .on-air{margin-left:auto;display:inline-flex;align-items:center;gap:5px;background:rgba(232,0,28,.1);border:1px solid rgba(232,0,28,.3);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;color:var(--red);letter-spacing:1.5px;text-transform:uppercase;flex-shrink:0;}
+
+    
+
+    /* TOAST */
+    .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(12px);background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:9px 16px;font-size:13px;color:var(--text);opacity:0;transition:all .28s;pointer-events:none;white-space:nowrap;z-index:999;}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+    @media(max-width:680px){
+      .app{grid-template-columns:1fr;padding-bottom:16px;}
+      :root{--menu-w:280px;}
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <button class="menu-btn" id="menuBtn" onclick="toggleMenu()">
+    <span></span><span></span><span></span>
+  </button>
+  <div class="app-logo">TV<span>•</span>LIVE</div>
+  <div class="live-pill"><div class="live-dot"></div>Ao Vivo</div>
+  <div class="hdr-spacer"></div>
+  <span id="tokenStatus" style="font-size:11px;color:var(--muted);letter-spacing:1px;flex-shrink:0;"></span>
+  <span class="now-ch-badge" id="headerChName"></span>
+</header>
+
+<div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
+<div class="ch-menu" id="chMenu">
+  <div class="ch-menu-hdr"><h2>Canais</h2></div>
+  <div class="ch-list" id="chList"></div>
+</div>
+
+<div class="app">
+  <div class="player-zone">
+    <div class="player-wrap" id="playerWrap">
+      <video id="video" playsinline></video>
+      <div class="status-overlay" id="statusOverlay">
+        <div class="spinner"></div>
+        <span class="status-text" id="statusTxt">Carregando sinal...</span>
+      </div>
+      <div class="player-overlay" id="playerOverlay">
+        <div class="ch-banner" id="chBanner"><span class="ch-banner-num" id="bannerNum"></span><div class="ch-banner-sep"></div><span class="ch-banner-name" id="bannerName"></span></div>
+        <button class="nav-arrow nav-prev" onclick="prevChannel(event)" title="Canal anterior">&#10094;</button>
+        <button class="nav-arrow nav-next" onclick="nextChannel(event)" title="Próximo canal">&#10095;</button>
+        <div class="controls">
+          <button class="ctrl-btn" id="playBtn" onclick="togglePlay()">&#9654;</button>
+          <button class="ctrl-btn" id="muteBtn" onclick="toggleMute()">&#128266;</button>
+          <input type="range" class="vol-slider" min="0" max="1" step="0.05" value="1" oninput="setVolume(this.value)"/>
+          <div class="flex1"></div>
+          <span class="hd-tag">HD</span>
+          <button class="ctrl-btn" onclick="castToTV()" title="Transmitir para TV">&#128253;</button>
+          <button class="ctrl-btn" onclick="mirrorScreen()" title="Espelhar tela">&#128227;</button>
+          <button class="ctrl-btn" onclick="toggleFS()">&#9633;</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="channel-info">
+      <div class="ch-header">
+        <div class="ch-logo-box" id="chLogoBox"></div>
+        <div class="ch-meta">
+          <h1 id="chName">-</h1>
+          <p id="chDesc"></p>
+        </div>
+        <div class="on-air"><div class="live-dot"></div>On Air</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CAST MODAL -->
+<div id="castModal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#181818;border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:22px;width:100%;max-width:360px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <span style="font-size:15px;font-weight:700;color:#fff;letter-spacing:1px;">&#128250; TRANSMITIR PARA TV</span>
+      <button onclick="closeCast()" style="background:rgba(255,255,255,.1);border:none;color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:16px;">&#10005;</button>
+    </div>
+    <div onclick="castWebVideoCast()" style="display:flex;align-items:center;gap:14px;padding:16px;background:rgba(255,255,255,.06);border-radius:14px;cursor:pointer;border:1px solid rgba(255,255,255,.12);active:background:rgba(255,255,255,.12);">
+      <div style="width:48px;height:48px;background:linear-gradient(135deg,#e91e63,#9c27b0);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">&#128225;</div>
+      <div style="flex:1;">
+        <div style="font-size:15px;font-weight:700;color:#fff;">Compartilhar para TV</div>
+        <div style="font-size:12px;color:#aaa;margin-top:3px;">Toca aqui → escolha Web Video Cast</div>
+      </div>
+      <span style="font-size:22px;color:#555;">&#10095;</span>
+    </div>
+  </div>
+</div>
+
+
+<script>
+(function(){
+"use strict";
+
+var CHANNELS = [
+  {
+    id:"bbbmosaico",name:"BBB - Mosaico",short:"BBBMOS",
+    desc:"BBB - Mosaico ao vivo",
+    icon:"&#128065;",color:"#e91e8c",text:"#fff",num:"170",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/759b2b6ad058e036cc4a8055e2ae6f45/bbbmosaico.m3u8"
+  },
+  {
+    id:"bbb1",name:"BBB - 1",short:"BBB1",
+    desc:"BBB - 1 ao vivo",
+    icon:"&#128065;",color:"#e91e8c",text:"#fff",num:"171",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/c3fab190c2430a496d12de868ac3ed0f/bbb1.m3u8"
+  },
+  {
+    id:"bbb2",name:"BBB - 2",short:"BBB2",
+    desc:"BBB - 2 ao vivo",
+    icon:"&#128065;",color:"#e91e8c",text:"#fff",num:"172",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/7deedaa7a1ba59fd4551199475be7136/bbb2.m3u8"
+  },
+  {
+    id:"bbb3",name:"BBB - 3",short:"BBB3",
+    desc:"BBB - 3 ao vivo",
+    icon:"&#128065;",color:"#e91e8c",text:"#fff",num:"173",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/97b07e801ac5c30ad34432d3da84c1d9/bbb3.m3u8"
+  },
+  {
+    id:"bbb4",name:"BBB - 4",short:"BBB4",
+    desc:"BBB - 4 ao vivo",
+    icon:"&#128065;",color:"#e91e8c",text:"#fff",num:"174",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/0e506319a2f054a4baeaa54b71825e61/bbb4.m3u8"
+  },
+  {
+    id:"bbb5",name:"BBB - 5",short:"BBB5",
+    desc:"BBB - 5 ao vivo",
+    icon:"&#128065;",color:"#e91e8c",text:"#fff",num:"175",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/5dd5426598fdd38b3bc4c7cd6a0aaec2/bbb5.m3u8"
+  },
+  {
+    id:"bbb6",name:"BBB - 6",short:"BBB6",
+    desc:"BBB - 6 ao vivo",
+    icon:"&#128065;",color:"#e91e8c",text:"#fff",num:"176",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/63c1e51533033319a932b7c7d9f5458a/bbb6.m3u8"
+  },
+  {
+    id:"bbb7",name:"BBB - 7",short:"BBB7",
+    desc:"BBB - 7 ao vivo",
+    icon:"&#128065;",color:"#e91e8c",text:"#fff",num:"177",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/1f53abdd1a19fe14613bb1a3609ecd3e/bbb7.m3u8"
+  },
+  {
+    id:"bbb8",name:"BBB - 8",short:"BBB8",
+    desc:"BBB - 8 ao vivo",
+    icon:"&#128065;",color:"#e91e8c",text:"#fff",num:"178",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/b342f9e524f58db8b9b7d61b949b3a55/bbb8.m3u8"
+  },
+  {
+    id:"bbb9",name:"BBB - 9",short:"BBB9",
+    desc:"BBB - 9 ao vivo",
+    icon:"&#128065;",color:"#e91e8c",text:"#fff",num:"179",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/9f3e728ea855c3afbb882ef27ee4243f/bbb9.m3u8"
+  },
+  {
+    id:"bbb10",name:"BBB - 10",short:"BBB10",
+    desc:"BBB - 10 ao vivo",
+    icon:"&#128065;",color:"#e91e8c",text:"#fff",num:"180",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/74a6c07a853aa391c3ff84570828427b/bbb10.m3u8"
+  },
+  {
+    id:"24h_dragonball",name:"24h Dragon Ball",short:"24H_DR",
+    desc:"24h Dragon Ball ao vivo",
+    icon:"&#9889;",color:"#ff6d00",text:"#fff",num:"1",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/6cf5a3a5e06d6f493eb7fa898220a4cb/24h_dragonball.m3u8"
+  },
+  {
+    id:"24h_simpsons",name:"24h Simpsons",short:"24H_SI",
+    desc:"24h Simpsons ao vivo",
+    icon:"&#128516;",color:"#ffd600",text:"#000",num:"4",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/799b2de855cdd194aca6a1f632de5810/24h_simpsons.m3u8"
+  },
+  {
+    id:"24h_odeiachris",name:"24h Todo Mundo Odeia o Chris",short:"24H_OD",
+    desc:"24h Todo Mundo Odeia o Chris ao vivo",
+    icon:"&#128516;",color:"#ffd600",text:"#000",num:"3",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/f17cba8c2d39b8688db5124c1f9a12ea/24h_odeiachris.m3u8"
+  },
+  {
+    id:"adultswim",name:"Adult Swim",short:"ADULTS",
+    desc:"Adult Swim ao vivo",
+    icon:"&#127946;",color:"#00bcd4",text:"#000",num:"5",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/b9b975a5ec3245b20c04bff2edb496bf/adultswim.m3u8"
+  },
+  {
+    id:"ae",name:"AE",short:"AE",
+    desc:"AE ao vivo",
+    icon:"&#128269;",color:"#003087",text:"#fff",num:"6",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/8defabac27a3c47f039504fca43c20d7/ae.m3u8"
+  },
+  {
+    id:"amc",name:"AMC",short:"AMC",
+    desc:"AMC ao vivo",
+    icon:"&#127916;",color:"#8b6914",text:"#fff",num:"169",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/6d3fa2ac10603f343b9c9602f03eb5bc/amc.m3u8"
+  },
+  {
+    id:"animalplanet",name:"Animal Planet",short:"ANIMAL",
+    desc:"Animal Planet ao vivo",
+    icon:"&#128007;",color:"#2e7d32",text:"#fff",num:"7",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/a4aa11c1ef954166e2f06e744f459621/animalplanet.m3u8"
+  },
+  {
+    id:"aparecida",name:"Aparecida",short:"APAREC",
+    desc:"Aparecida ao vivo",
+    icon:"&#128331;",color:"#5c3317",text:"#f5d78e",num:"8",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/54b12ac0e27e3f0ae8e52ad7352b400c/aparecida.m3u8"
+  },
+  {
+    id:"axn",name:"AXN",short:"AXN",
+    desc:"AXN ao vivo",
+    icon:"&#128165;",color:"#cc0000",text:"#fff",num:"9",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/d6da2cd4f3146030a0ef18ff046accc7/axn.m3u8"
+  },
+  {
+    id:"band",name:"Band",short:"BAND",
+    desc:"Band ao vivo",
+    icon:"&#9917;",color:"#d4000f",text:"#fff",num:"10",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/9e73b22844917456500ccb95618dffc5/band.m3u8"
+  },
+  {
+    id:"bandnews",name:"Band News",short:"BANDNE",
+    desc:"Band News ao vivo",
+    icon:"&#128240;",color:"#1a1a2e",text:"#4fc3f7",num:"11",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/fe8bdbd7033a247c5fd99252fca8b447/bandnews.m3u8"
+  },
+  {
+    id:"bandsports",name:"Band Sports",short:"BANDSP",
+    desc:"Band Sports ao vivo",
+    icon:"&#127942;",color:"#0d47a1",text:"#ffeb3b",num:"12",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/71012785cace3d7fb510aa3b72ececac/bandsports.m3u8"
+  },
+  {
+    id:"cartoonnetwork",name:"Cartoon Network",short:"CARTOO",
+    desc:"Cartoon Network ao vivo",
+    icon:"&#127803;",color:"#00bcd4",text:"#fff",num:"24",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/af437b7526d07c652d4d68bf6319244a/cartoonnetwork.m3u8"
+  },
+  {
+    id:"cartoonito",name:"Cartoonito",short:"CARTOO",
+    desc:"Cartoonito ao vivo",
+    icon:"&#11088;",color:"#ff6f00",text:"#fff",num:"23",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/52ff1600473b963309d39c42020777c4/cartoonito.m3u8"
+  },
+  {
+    id:"caze1",name:"Caze TV 1",short:"CAZE1",
+    desc:"Caze TV 1 ao vivo",
+    icon:"&#127953;",color:"#6a0dad",text:"#fff",num:"25",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/0519262e3212fa296a872727c6021179/caze1.m3u8"
+  },
+  {
+    id:"caze2",name:"Caze TV 2",short:"CAZE2",
+    desc:"Caze TV 2 ao vivo",
+    icon:"&#127953;",color:"#6a0dad",text:"#fff",num:"26",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/1ad648229da1ef69fbe040049c5e8ff1/caze2.m3u8"
+  },
+  {
+    id:"cinemax",name:"Cine Max",short:"CINEMA",
+    desc:"Cine Max ao vivo",
+    icon:"&#127909;",color:"#b71c1c",text:"#fff",num:"30",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/0c50b929e67f9048cd50751cfe641e1f/cinemax.m3u8"
+  },
+  {
+    id:"cnnbrasil",name:"CNN Brasil",short:"CNNBRA",
+    desc:"CNN Brasil ao vivo",
+    icon:"&#128248;",color:"#cc0000",text:"#fff",num:"31",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/c4f90b2be0e2899b1bdb3f082b654e62/cnnbrasil.m3u8"
+  },
+  {
+    id:"combate",name:"Combate",short:"COMBAT",
+    desc:"Combate ao vivo",
+    icon:"&#129354;",color:"#1a1a1a",text:"#ff3d00",num:"32",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/443544e0391b893f48e8cc5a176b5787/combate.m3u8"
+  },
+  {
+    id:"comedycentral",name:"Comedy Central",short:"COMEDY",
+    desc:"Comedy Central ao vivo",
+    icon:"&#128514;",color:"#ffdd00",text:"#000",num:"33",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/9baa25e3d6e960bd792ee4830a4cdeb3/comedycentral.m3u8"
+  },
+  {
+    id:"cultura",name:"Cultura",short:"CULTUR",
+    desc:"Cultura ao vivo",
+    icon:"&#127981;",color:"#1565c0",text:"#fff",num:"34",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/ddd254e5c3109b51ddd29cbed400778a/cultura.m3u8"
+  },
+  {
+    id:"discoverychannel",name:"Discovery Channel",short:"DISCOV",
+    desc:"Discovery Channel ao vivo",
+    icon:"&#127758;",color:"#003c8f",text:"#fff",num:"35",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/b14457ee685ff25e3108f330a4bcb456/discoverychannel.m3u8"
+  },
+  {
+    id:"discoveryhh",name:"Discovery HH",short:"DISCOV",
+    desc:"Discovery HH ao vivo",
+    icon:"&#127968;",color:"#6d4c41",text:"#fff",num:"36",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/df23e7ee75946ce579d0e66bb06fa0e0/discoveryhh.m3u8"
+  },
+  {
+    id:"discoveryid",name:"Discovery ID",short:"DISCOV",
+    desc:"Discovery ID ao vivo",
+    icon:"&#128270;",color:"#37474f",text:"#fff",num:"37",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/75f02cb196ee083ba19ac29ec64492c1/discoveryid.m3u8"
+  },
+  {
+    id:"discoverykids",name:"Discovery Kids",short:"DISCOV",
+    desc:"Discovery Kids ao vivo",
+    icon:"&#127774;",color:"#00897b",text:"#fff",num:"38",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/fdf4757bd7d2f24ab21421d7d21d7cab/discoverykids.m3u8"
+  },
+  {
+    id:"discoveryscience",name:"Discovery Science",short:"DISCOV",
+    desc:"Discovery Science ao vivo",
+    icon:"&#128300;",color:"#1565c0",text:"#fff",num:"39",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/a90779796e9bab2d5ff23a53ab76c35a/discoveryscience.m3u8"
+  },
+  {
+    id:"discoverytheather",name:"Discovery Theater",short:"DISCOV",
+    desc:"Discovery Theater ao vivo",
+    icon:"&#127916;",color:"#4a148c",text:"#fff",num:"40",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/1585149a927561be73221b82fb7e639e/discoverytheather.m3u8"
+  },
+  {
+    id:"discoveryturbo",name:"Discovery Turbo",short:"DISCOV",
+    desc:"Discovery Turbo ao vivo",
+    icon:"&#127950;",color:"#c0001a",text:"#ffd100",num:"41",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/f603b94d0132412b603e02f221ce521a/discoveryturbo.m3u8"
+  },
+  {
+    id:"disneyplus1",name:"Disney+ 1",short:"DISNEY",
+    desc:"Disney+ 1 ao vivo",
+    icon:"&#10024;",color:"#1565c0",text:"#fff",num:"42",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/51c807ad80def20abc9c85d6982c8fc9/disneyplus1.m3u8"
+  },
+  {
+    id:"disneyplus2",name:"Disney+ 2",short:"DISNEY",
+    desc:"Disney+ 2 ao vivo",
+    icon:"&#10024;",color:"#1565c0",text:"#fff",num:"43",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/65c37a4eaad6794f67472558f26b6f96/disneyplus2.m3u8"
+  },
+  {
+    id:"disneyplus3",name:"Disney+ 3",short:"DISNEY",
+    desc:"Disney+ 3 ao vivo",
+    icon:"&#10024;",color:"#1565c0",text:"#fff",num:"44",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/9511d8c5bec651a511d3ce79b05e4374/disneyplus3.m3u8"
+  },
+  {
+    id:"espn",name:"ESPN 1",short:"ESPN",
+    desc:"ESPN 1 ao vivo",
+    icon:"&#127944;",color:"#cc0000",text:"#fff",num:"45",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/226addeadd0b66d4f012ce6b0b1ecfd4/espn.m3u8"
+  },
+  {
+    id:"espn2",name:"ESPN 2",short:"ESPN2",
+    desc:"ESPN 2 ao vivo",
+    icon:"&#127944;",color:"#cc0000",text:"#fff",num:"46",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/449b08ffc50dec4fca9b1892719c1a4a/espn2.m3u8"
+  },
+  {
+    id:"espn3",name:"ESPN 3",short:"ESPN3",
+    desc:"ESPN 3 ao vivo",
+    icon:"&#127944;",color:"#cc0000",text:"#fff",num:"47",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/080f4a6d61bfa71f401394f0fa2d3c92/espn3.m3u8"
+  },
+  {
+    id:"espn4",name:"ESPN 4",short:"ESPN4",
+    desc:"ESPN 4 ao vivo",
+    icon:"&#127944;",color:"#cc0000",text:"#fff",num:"48",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/143cb7f2411d4428f50cc9bcab91c456/espn4.m3u8"
+  },
+  {
+    id:"espn5",name:"ESPN 5",short:"ESPN5",
+    desc:"ESPN 5 ao vivo",
+    icon:"&#127944;",color:"#cc0000",text:"#fff",num:"49",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/e83b52bf8c9ade325602b6b4fffdd7ff/espn5.m3u8"
+  },
+  {
+    id:"foodnetwork",name:"Food Network",short:"FOODNE",
+    desc:"Food Network ao vivo",
+    icon:"&#127859;",color:"#e65100",text:"#fff",num:"50",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/6bf6e84eb281ff14350af47c4986c7d3/foodnetwork.m3u8"
+  },
+  {
+    id:"globoam",name:"Globo Amazonas",short:"GLOBOA",
+    desc:"Globo Amazonas ao vivo",
+    icon:"&#127757;",color:"#0065b3",text:"#fff",num:"150",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/5f6fb4ed097bfc1ca36af3bec3e52b9b/globoam.m3u8"
+  },
+  {
+    id:"globoes",name:"Globo ES",short:"GLOBOE",
+    desc:"Globo ES ao vivo",
+    icon:"&#127757;",color:"#0065b3",text:"#fff",num:"162",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/1846e18276b5c67bcf637b9d249c9d18/globoes.m3u8"
+  },
+  {
+    id:"globomg",name:"Globo Minas",short:"GLOBOM",
+    desc:"Globo Minas ao vivo",
+    icon:"&#127757;",color:"#0065b3",text:"#fff",num:"149",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/3574130b2bbdc51784b9118074982831/globomg.m3u8"
+  },
+  {
+    id:"globonews",name:"Globo News",short:"GLOBON",
+    desc:"Globo News ao vivo",
+    icon:"&#128240;",color:"#1565c0",text:"#fff",num:"52",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/8bee941a822c66d1ba297e0a2675ecbc/globonews.m3u8"
+  },
+  {
+    id:"viva",name:"Globo Novelas",short:"VIVA",
+    desc:"Globo Novelas ao vivo",
+    icon:"&#127942;",color:"#7b1fa2",text:"#fff",num:"134",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/c249c45138eae2703d6ce7d4d3dbd0de/viva.m3u8"
+  },
+  {
+    id:"globorj",name:"Globo RJ",short:"GLOBOR",
+    desc:"Globo RJ ao vivo",
+    icon:"&#127757;",color:"#0065b3",text:"#fff",num:"53",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/d63bdadc30eaa869e18c0358beda9c90/globorj.m3u8"
+  },
+  {
+    id:"globors",name:"Globo RS",short:"GLOBOR",
+    desc:"Globo RS ao vivo",
+    icon:"&#127757;",color:"#0065b3",text:"#fff",num:"151",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/1d52c50a786dc0b23fba4f313c90d034/globors.m3u8"
+  },
+  {
+    id:"globosp",name:"Globo SP",short:"GLOBOS",
+    desc:"Globo SP ao vivo",
+    icon:"&#127757;",color:"#0065b3",text:"#fff",num:"54",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/686f1ebc11680fd51029addb2a5b930a/globosp.m3u8"
+  },
+  {
+    id:"gloob",name:"Gloob",short:"GLOOB",
+    desc:"Gloob ao vivo",
+    icon:"&#127774;",color:"#7b1fa2",text:"#fff",num:"55",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/3ae3db6d63d07bda9923443e11ee889d/gloob.m3u8"
+  },
+  {
+    id:"gnt",name:"GNT",short:"GNT",
+    desc:"GNT ao vivo",
+    icon:"&#128149;",color:"#ad1457",text:"#fff",num:"56",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/cd85681f8d47ba74f887819ca904292a/gnt.m3u8"
+  },
+  {
+    id:"hbo",name:"HBO",short:"HBO",
+    desc:"HBO ao vivo",
+    icon:"&#127916;",color:"#005f8e",text:"#fff",num:"60",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/9dacbb22d7702f1e703eee6b1c18549f/hbo.m3u8"
+  },
+  {
+    id:"hbo2",name:"HBO 2",short:"HBO2",
+    desc:"HBO 2 ao vivo",
+    icon:"&#127916;",color:"#005f8e",text:"#fff",num:"61",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/c89abef8d2fe51d36664ec01a04df0d4/hbo2.m3u8"
+  },
+  {
+    id:"hbofamily",name:"HBO Family",short:"HBOFAM",
+    desc:"HBO Family ao vivo",
+    icon:"&#127916;",color:"#005f8e",text:"#fff",num:"62",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/e8ed665aa28d40b2880fbdee09aeefb9/hbofamily.m3u8"
+  },
+  {
+    id:"hbomundi",name:"HBO Mundi",short:"HBOMUN",
+    desc:"HBO Mundi ao vivo",
+    icon:"&#127916;",color:"#005f8e",text:"#fff",num:"63",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/b20d8f42f031bdd62280a548a328b5b2/hbomundi.m3u8"
+  },
+  {
+    id:"hboplus",name:"HBO Plus",short:"HBOPLU",
+    desc:"HBO Plus ao vivo",
+    icon:"&#127916;",color:"#005f8e",text:"#fff",num:"64",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/e5ff0c91e37f26a2434b15211ee7903a/hboplus.m3u8"
+  },
+  {
+    id:"hbopop",name:"HBO Pop",short:"HBOPOP",
+    desc:"HBO Pop ao vivo",
+    icon:"&#127916;",color:"#005f8e",text:"#fff",num:"65",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/6f011b5901d3d466b86a49185baa9a79/hbopop.m3u8"
+  },
+  {
+    id:"hboxtreme",name:"HBO Xtreme",short:"HBOXTR",
+    desc:"HBO Xtreme ao vivo",
+    icon:"&#127916;",color:"#005f8e",text:"#fff",num:"66",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/c2ac3b0ea005083c0f0eab328bb02419/hboxtreme.m3u8"
+  },
+  {
+    id:"hgtv",name:"HGTV",short:"HGTV",
+    desc:"HGTV ao vivo",
+    icon:"&#127968;",color:"#558b2f",text:"#fff",num:"67",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/9527b9124f30fa3b87b4175c526ed54e/hgtv.m3u8"
+  },
+  {
+    id:"history",name:"History",short:"HISTOR",
+    desc:"History ao vivo",
+    icon:"&#127981;",color:"#795548",text:"#fff",num:"68",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/516b8c22d04c8d93d7878c5e0f732ec2/history.m3u8"
+  },
+  {
+    id:"history2",name:"History 2",short:"HISTOR",
+    desc:"History 2 ao vivo",
+    icon:"&#127981;",color:"#795548",text:"#fff",num:"69",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/db77d12815b28ef78f155aca2fa2e232/history2.m3u8"
+  },
+  {
+    id:"max1",name:"MAX 1",short:"MAX1",
+    desc:"MAX 1 ao vivo",
+    icon:"&#127909;",color:"#002868",text:"#fff",num:"70",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/8f9b9054a41ece5311c5a276d594cc8c/max1.m3u8"
+  },
+  {
+    id:"max2",name:"MAX 2",short:"MAX2",
+    desc:"MAX 2 ao vivo",
+    icon:"&#127909;",color:"#002868",text:"#fff",num:"71",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/8d5e110461d29b65872e628ec1a06a4b/max2.m3u8"
+  },
+  {
+    id:"max3",name:"MAX 3",short:"MAX3",
+    desc:"MAX 3 ao vivo",
+    icon:"&#127909;",color:"#002868",text:"#fff",num:"72",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/c07ab412d01aa8e450f8d41eaf3dca7f/max3.m3u8"
+  },
+  {
+    id:"max4",name:"MAX 4",short:"MAX4",
+    desc:"MAX 4 ao vivo",
+    icon:"&#127909;",color:"#002868",text:"#fff",num:"165",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/3424040c2c9ca40cb1ba0477b90be329/max4.m3u8"
+  },
+  {
+    id:"max5",name:"MAX 5",short:"MAX5",
+    desc:"MAX 5 ao vivo",
+    icon:"&#127909;",color:"#002868",text:"#fff",num:"166",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/1d9579819be9ebd1688233e3d411e810/max5.m3u8"
+  },
+  {
+    id:"megapix",name:"Megapix",short:"MEGAPI",
+    desc:"Megapix ao vivo",
+    icon:"&#127909;",color:"#c62828",text:"#fff",num:"57",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/e62bb01824dc67fe25a7e972401c718d/megapix.m3u8"
+  },
+  {
+    id:"mtv",name:"MTV",short:"MTV",
+    desc:"MTV ao vivo",
+    icon:"&#127925;",color:"#000",text:"#ffeb3b",num:"77",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/1e6d2f6ae23c37dccb906f93fad55540/mtv.m3u8"
+  },
+  {
+    id:"multishow",name:"Multishow",short:"MULTIS",
+    desc:"Multishow ao vivo",
+    icon:"&#127917;",color:"#9c27b0",text:"#fff",num:"78",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/943bb8743acac5e6708441648df0c899/multishow.m3u8"
+  },
+  {
+    id:"nickelodeon",name:"Nickelodeon",short:"NICKEL",
+    desc:"Nickelodeon ao vivo",
+    icon:"&#128520;",color:"#ff6f00",text:"#fff",num:"81",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/ad9b94a1109b22c1616694e4a09b5d9e/nickelodeon.m3u8"
+  },
+  {
+    id:"off",name:"OFF",short:"OFF",
+    desc:"OFF ao vivo",
+    icon:"&#127757;",color:"#00695c",text:"#fff",num:"84",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/0449685519d802a797c6278980100b07/off.m3u8"
+  },
+  {
+    id:"paramountplus",name:"Paramount+",short:"PARAMO",
+    desc:"Paramount+ ao vivo",
+    icon:"&#11088;",color:"#1565c0",text:"#fff",num:"85",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/178906337bc8a294b6240f969e1617db/paramountplus.m3u8"
+  },
+  {
+    id:"playboy",name:"Play Boy",short:"PLAYBO",
+    desc:"Play Boy ao vivo",
+    icon:"&#128048;",color:"#000",text:"#fff",num:"86",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/81a369dba183e6b392f02adec00b64e1/playboy.m3u8"
+  },
+  {
+    id:"premiere",name:"Premiere 1",short:"PREMIE",
+    desc:"Premiere 1 ao vivo",
+    icon:"&#9917;",color:"#006400",text:"#fff",num:"87",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/25292140fb40ecfb29b510bad8b8e220/premiere.m3u8"
+  },
+  {
+    id:"premiere2",name:"Premiere 2",short:"PREMIE",
+    desc:"Premiere 2 ao vivo",
+    icon:"&#9917;",color:"#006400",text:"#fff",num:"88",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/47c717819c1a7df15674c92dcf0a750b/premiere2.m3u8"
+  },
+  {
+    id:"premiere3",name:"Premiere 3",short:"PREMIE",
+    desc:"Premiere 3 ao vivo",
+    icon:"&#9917;",color:"#006400",text:"#fff",num:"89",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/2b7e8d94f48e02107e3b85b4625a60c3/premiere3.m3u8"
+  },
+  {
+    id:"premiere4",name:"Premiere 4",short:"PREMIE",
+    desc:"Premiere 4 ao vivo",
+    icon:"&#9917;",color:"#006400",text:"#fff",num:"90",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/6fff1d1bd6a1386db9288f96ed4f6fa0/premiere4.m3u8"
+  },
+  {
+    id:"premiere5",name:"Premiere 5",short:"PREMIE",
+    desc:"Premiere 5 ao vivo",
+    icon:"&#9917;",color:"#006400",text:"#fff",num:"91",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/c56c5a06a448a4d4c94c2b7a7412ab75/premiere5.m3u8"
+  },
+  {
+    id:"premiere6",name:"Premiere 6",short:"PREMIE",
+    desc:"Premiere 6 ao vivo",
+    icon:"&#9917;",color:"#006400",text:"#fff",num:"92",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/deedf3d3252676f00cb15fe8564c6f2d/premiere6.m3u8"
+  },
+  {
+    id:"premiere7",name:"Premiere 7",short:"PREMIE",
+    desc:"Premiere 7 ao vivo",
+    icon:"&#9917;",color:"#006400",text:"#fff",num:"93",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/31e7d24a27be5783d4530c269cab6dfe/premiere7.m3u8"
+  },
+  {
+    id:"premiere8",name:"Premiere 8",short:"PREMIE",
+    desc:"Premiere 8 ao vivo",
+    icon:"&#9917;",color:"#006400",text:"#fff",num:"94",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/0f25b52460ee6ce1fb0b6e3404e705f7/premiere8.m3u8"
+  },
+  {
+    id:"primevideo",name:"Prime Video",short:"PRIMEV",
+    desc:"Prime Video ao vivo",
+    icon:"&#127909;",color:"#00a8e0",text:"#fff",num:"95",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/eb23dce320380a1bd7c8329f1e46f5b1/primevideo.m3u8"
+  },
+  {
+    id:"primevideo2",name:"Prime Video 2",short:"PRIMEV",
+    desc:"Prime Video 2 ao vivo",
+    icon:"&#127909;",color:"#00a8e0",text:"#fff",num:"96",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/a60840ad7f5b11e5ca853b6da3486edb/primevideo2.m3u8"
+  },
+  {
+    id:"pt_eleven1",name:"PT Eleven 1",short:"PT_ELE",
+    desc:"PT Eleven 1 ao vivo",
+    icon:"&#127944;",color:"#003087",text:"#fff",num:"97",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/361af30ad80e20a1a2d0e75472a702da/pt_eleven1.m3u8"
+  },
+  {
+    id:"pt_eleven2",name:"PT Eleven 2",short:"PT_ELE",
+    desc:"PT Eleven 2 ao vivo",
+    icon:"&#127944;",color:"#003087",text:"#fff",num:"98",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/b6fb4054b290bd6203df85a6f8f9c000/pt_eleven2.m3u8"
+  },
+  {
+    id:"pt_eleven3",name:"PT Eleven 3",short:"PT_ELE",
+    desc:"PT Eleven 3 ao vivo",
+    icon:"&#127944;",color:"#003087",text:"#fff",num:"99",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/f556969ebd78d8087e1d3df083a055fc/pt_eleven3.m3u8"
+  },
+  {
+    id:"pt_sportv1",name:"PT Sportv 1",short:"PT_SPO",
+    desc:"PT Sportv 1 ao vivo",
+    icon:"&#127944;",color:"#1b5e20",text:"#fff",num:"103",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/a19fe93363dcd209f8ff856f3b0ef515/pt_sportv1.m3u8"
+  },
+  {
+    id:"pt_sportv2",name:"PT Sportv 2",short:"PT_SPO",
+    desc:"PT Sportv 2 ao vivo",
+    icon:"&#127944;",color:"#1b5e20",text:"#fff",num:"104",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/12f53f67f4fbadbb37fa953c16a54629/pt_sportv2.m3u8"
+  },
+  {
+    id:"pt_sportv3",name:"PT Sportv 3",short:"PT_SPO",
+    desc:"PT Sportv 3 ao vivo",
+    icon:"&#127944;",color:"#1b5e20",text:"#fff",num:"105",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/f6fddef2174db17e9e30920899c5cc59/pt_sportv3.m3u8"
+  },
+  {
+    id:"pt_sportv4",name:"PT Sportv 4",short:"PT_SPO",
+    desc:"PT Sportv 4 ao vivo",
+    icon:"&#127944;",color:"#1b5e20",text:"#fff",num:"106",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/6ac2d470f2267a2dadac3679f659cf5d/pt_sportv4.m3u8"
+  },
+  {
+    id:"pt_sportv5",name:"PT Sportv 5",short:"PT_SPO",
+    desc:"PT Sportv 5 ao vivo",
+    icon:"&#127944;",color:"#1b5e20",text:"#fff",num:"107",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/73d1558d59de85ebd8a7d5d121558cc7/pt_sportv5.m3u8"
+  },
+  {
+    id:"record",name:"Record",short:"RECORD",
+    desc:"Record ao vivo",
+    icon:"&#127757;",color:"#c62828",text:"#fff",num:"108",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/2ce28f1bf977bb586f9c48a82e98d8d7/record.m3u8"
+  },
+  {
+    id:"redetv",name:"Rede TV",short:"REDETV",
+    desc:"Rede TV ao vivo",
+    icon:"&#127757;",color:"#1565c0",text:"#fff",num:"109",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/9cd080323eddf73f737ae6c6be1c9740/redetv.m3u8"
+  },
+  {
+    id:"sbt",name:"SBT",short:"SBT",
+    desc:"SBT ao vivo",
+    icon:"&#127757;",color:"#1565c0",text:"#fff",num:"110",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/001ddd81a7932d68d2c3c2342b53519d/sbt.m3u8"
+  },
+  {
+    id:"sexyhot",name:"Sexy Hot",short:"SEXYHO",
+    desc:"Sexy Hot ao vivo",
+    icon:"&#128420;",color:"#880e4f",text:"#fff",num:"111",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/03c1cb806a11ae8bdb8ca3a461279101/sexyhot.m3u8"
+  },
+  {
+    id:"sonychannel",name:"Sony Channel",short:"SONYCH",
+    desc:"Sony Channel ao vivo",
+    icon:"&#127916;",color:"#000",text:"#fff",num:"112",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/11eaab35dcdcd8fb69de65108cc424bf/sonychannel.m3u8"
+  },
+  {
+    id:"space",name:"Space",short:"SPACE",
+    desc:"Space ao vivo",
+    icon:"&#128640;",color:"#0d47a1",text:"#fff",num:"113",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/1470859ad0d0f7c9e68a91da88e1f173/space.m3u8"
+  },
+  {
+    id:"sportv",name:"Sportv",short:"SPORTV",
+    desc:"Sportv ao vivo",
+    icon:"&#127944;",color:"#1b5e20",text:"#fff",num:"114",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/7264088785b21254f96aee4065d3aa9e/sportv.m3u8"
+  },
+  {
+    id:"sportv2",name:"Sportv 2",short:"SPORTV",
+    desc:"Sportv 2 ao vivo",
+    icon:"&#127944;",color:"#1b5e20",text:"#fff",num:"115",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/e9a04c6629eb3001fb4decf2b10f7a6a/sportv2.m3u8"
+  },
+  {
+    id:"sportv3",name:"Sportv 3",short:"SPORTV",
+    desc:"Sportv 3 ao vivo",
+    icon:"&#127944;",color:"#1b5e20",text:"#fff",num:"116",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/157e1c43ca891518393f4420000e06e6/sportv3.m3u8"
+  },
+  {
+    id:"sportv4",name:"Sportv 4",short:"SPORTV",
+    desc:"Sportv 4 ao vivo",
+    icon:"&#127944;",color:"#1b5e20",text:"#fff",num:"117",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/4dc8440dd8d8d86a370e97c86a467a80/sportv4.m3u8"
+  },
+  {
+    id:"studiouniversal",name:"Studio Universal",short:"STUDIO",
+    desc:"Studio Universal ao vivo",
+    icon:"&#127916;",color:"#4527a0",text:"#fff",num:"119",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/b2f0a49bc98c8f08ee7bccfd0e336bec/studiouniversal.m3u8"
+  },
+  {
+    id:"tcm",name:"TCM",short:"TCM",
+    desc:"TCM ao vivo",
+    icon:"&#127916;",color:"#b71c1c",text:"#fff",num:"120",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/b8513daa2dcda4ea95f2e0a27ffd62b7/tcm.m3u8"
+  },
+  {
+    id:"telecineaction",name:"Telecine Action",short:"TELECI",
+    desc:"Telecine Action ao vivo",
+    icon:"&#127909;",color:"#b71c1c",text:"#fff",num:"121",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/cbcbdca0166197c828afcf1fb53b41bc/telecineaction.m3u8"
+  },
+  {
+    id:"telecinecult",name:"Telecine Cult",short:"TELECI",
+    desc:"Telecine Cult ao vivo",
+    icon:"&#127909;",color:"#b71c1c",text:"#fff",num:"122",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/35e4fd56a749da6841fcdac7dd29c5ad/telecinecult.m3u8"
+  },
+  {
+    id:"telecinefun",name:"Telecine Fun",short:"TELECI",
+    desc:"Telecine Fun ao vivo",
+    icon:"&#127909;",color:"#b71c1c",text:"#fff",num:"123",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/7c7ca1022ebd1b849b798a3235880e69/telecinefun.m3u8"
+  },
+  {
+    id:"telecinepipoca",name:"Telecine Pipoca",short:"TELECI",
+    desc:"Telecine Pipoca ao vivo",
+    icon:"&#127909;",color:"#b71c1c",text:"#fff",num:"124",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/5500f13e7560c11766cbbc640b43a27c/telecinepipoca.m3u8"
+  },
+  {
+    id:"telecinepremium",name:"Telecine Premium",short:"TELECI",
+    desc:"Telecine Premium ao vivo",
+    icon:"&#127909;",color:"#b71c1c",text:"#fff",num:"125",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/bafa8c1a0e2feaee9b9053cf6dcee184/telecinepremium.m3u8"
+  },
+  {
+    id:"telecinetouch",name:"Telecine Touch",short:"TELECI",
+    desc:"Telecine Touch ao vivo",
+    icon:"&#127909;",color:"#b71c1c",text:"#fff",num:"126",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/87ff99f0fee9966cdd57ee44fa23d2b2/telecinetouch.m3u8"
+  },
+  {
+    id:"tlc",name:"TLC",short:"TLC",
+    desc:"TLC ao vivo",
+    icon:"&#128149;",color:"#880e4f",text:"#fff",num:"128",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/c210a3d11b9a81ff6637fc1d6f10eda0/tlc.m3u8"
+  },
+  {
+    id:"tnt",name:"TNT",short:"TNT",
+    desc:"TNT ao vivo",
+    icon:"&#128165;",color:"#b71c1c",text:"#fff",num:"129",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/a7b846533f69a9a8c24aec427244a89f/tnt.m3u8"
+  },
+  {
+    id:"tntnovelas",name:"TNT Novelas",short:"TNTNOV",
+    desc:"TNT Novelas ao vivo",
+    icon:"&#127916;",color:"#ad1457",text:"#fff",num:"130",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/0deea7cd06ac2d4cda511a3783f5c508/tntnovelas.m3u8"
+  },
+  {
+    id:"tntseries",name:"TNT Series",short:"TNTSER",
+    desc:"TNT Series ao vivo",
+    icon:"&#127916;",color:"#b71c1c",text:"#fff",num:"131",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/1522dbb0891cf346db0d12e16e5ea153/tntseries.m3u8"
+  },
+  {
+    id:"universaltv",name:"Universal TV",short:"UNIVER",
+    desc:"Universal TV ao vivo",
+    icon:"&#127916;",color:"#4527a0",text:"#fff",num:"133",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/71aeea736500fd48190608f0ed5536cb/universaltv.m3u8"
+  },
+  {
+    id:"warnerchannel",name:"Warner Channel",short:"WARNER",
+    desc:"Warner Channel ao vivo",
+    icon:"&#127916;",color:"#1565c0",text:"#fff",num:"135",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/b55777afb4625f69be817fb012a5379f/warnerchannel.m3u8"
+  },
+  {
+    id:"xsports",name:"X Sports",short:"XSPORT",
+    desc:"X Sports ao vivo",
+    icon:"&#127936;",color:"#e65100",text:"#fff",num:"168",
+    epgId:null,
+    url:"https://canaiss.fazoeli.co.za/token/56b26178a4a3d1c813689af2af0cd4e6/xsports.m3u8"
+  }
+];
+
+/* ── STATE ── */
+var curIdx = 0;
+var menuOpen = false;
+
+/* ── HLS PLAYER ── */
+var hls = null;
+
+function playChannel(idx) {
+  curIdx = idx;
+
+  // Destroi HLS anterior
+  if (hls !== null) {
+    hls.destroy();
+    hls = null;
+  }
+
+  var ch = CHANNELS[idx];
+  var video = document.getElementById("video");
+  var statusOverlay = document.getElementById("statusOverlay");
+  var statusTxt = document.getElementById("statusTxt");
+
+  // Mostra loading
+  statusOverlay.style.display = "flex";
+  statusOverlay.style.opacity = "1";
+  statusTxt.textContent = "Carregando sinal...";
+
+  // Atualiza UI
+  updateUI(ch);
+  showOverlayControls();
+
+  if (Hls.isSupported()) {
+    hls = new Hls();
+    hls.loadSource(ch.url);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, function() {
+      video.play().catch(function(){});
+      statusOverlay.style.transition = "opacity .5s";
+      statusOverlay.style.opacity = "0";
+      setTimeout(function(){ statusOverlay.style.display = "none"; }, 500);
+    });
+    hls.on(Hls.Events.ERROR, function(event, data) {
+      if (data.fatal) {
+        statusTxt.textContent = "Erro no sinal. Renovando token...";
+        // Tenta renovar o token antes de retocar
+        var ch = CHANNELS[curIdx];
+        var slug = ch.id || _slugFromUrl(ch.url);
+        _fetchTok(slug, curIdx).then(function(ok) {
+          setTimeout(function(){
+            if(hls){ hls.destroy(); hls = null; }
+            playChannel(curIdx);
+          }, ok ? 500 : 4000);
+        }).catch(function(){
+          setTimeout(function(){
+            if(hls){ hls.destroy(); hls = null; }
+            playChannel(curIdx);
+          }, 4000);
+        });
+      }
+    });
+  } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    video.src = ch.url;
+    video.addEventListener("loadedmetadata", function() {
+      video.play();
+      statusOverlay.style.opacity = "0";
+      setTimeout(function(){ statusOverlay.style.display = "none"; }, 500);
+    }, { once: true });
+  }
+}
+
+
+/* ── BANNER NOME DO CANAL ── */
+var bannerTimer = null;
+function showChannelBanner(ch) {
+  var banner = document.getElementById("chBanner");
+  document.getElementById("bannerNum").textContent = ch.num;
+  document.getElementById("bannerName").textContent = ch.name;
+  banner.classList.add("visible");
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(function() {
+    banner.classList.remove("visible");
+  }, 5000);
+}
+
+/* ── UI ── */
+function updateUI(ch) {
+  var lb = document.getElementById("chLogoBox");
+  lb.textContent = ch.short;
+  lb.style.background = ch.color;
+  lb.style.color = ch.text;
+  document.getElementById("chName").textContent = ch.name;
+  document.getElementById("chDesc").textContent = ch.desc;
+  document.getElementById("headerChName").textContent = ch.num + " • " + ch.name;
+  showChannelBanner(ch);
+  buildChList();
+}
+
+/* ── CHANNEL LIST ── *//* ── CHANNEL LIST ── */
+function buildChList() {
+  var list = document.getElementById("chList");
+  list.innerHTML = "";
+  CHANNELS.forEach(function(ch, i) {
+    var div = document.createElement("div");
+    div.className = "ch-item" + (i === curIdx ? " active" : "");
+    div.innerHTML =
+      "<div class=\"ch-badge\" style=\"background:"+ch.color+";color:"+ch.text+"\">"+ch.short+"</div>"+
+      "<div class=\"ch-item-info\"><h3>"+ch.name+"</h3><p>"+ch.desc+"</p></div>"+
+      "<span class=\"ch-num-tag\">"+ch.num+"</span>";
+    div.onclick = (function(idx){
+      return function(){
+        toggleMenu();
+        playChannel(idx);
+      };
+    })(i);
+    list.appendChild(div);
+  });
+}
+
+/* ── MENU ── */
+window.toggleMenu = function() {
+  menuOpen = !menuOpen;
+  document.getElementById("menuBtn").classList.toggle("open", menuOpen);
+  document.getElementById("menuOverlay").classList.toggle("open", menuOpen);
+  document.getElementById("chMenu").classList.toggle("open", menuOpen);
+};
+
+/* ── AUTO-HIDE CONTROLS ── */
+var hideTimer = null;
+var overlayVisible = true;
+
+function showOverlayControls() {
+  var ov = document.getElementById("playerOverlay");
+  ov.classList.add("visible");
+  overlayVisible = true;
+  clearTimeout(hideTimer);
+  // Mostra o banner do canal junto com os controles
+  var ch = CHANNELS[curIdx];
+  if (ch) showChannelBanner(ch);
+  hideTimer = setTimeout(function() {
+    ov.classList.remove("visible");
+    overlayVisible = false;
+  }, 5000);
+}
+
+function hideOverlayControls() {
+  clearTimeout(hideTimer);
+  document.getElementById("playerOverlay").classList.remove("visible");
+  overlayVisible = false;
+}
+
+document.getElementById("playerWrap").addEventListener("click", function(e) {
+  if (e.target.closest(".ctrl-btn") || e.target.closest(".vol-slider") || e.target.closest(".nav-arrow")) return;
+  if (overlayVisible) {
+    hideOverlayControls();
+  } else {
+    showOverlayControls();
+  }
+});
+
+
+/* ── NAVEGAÇÃO POR SETAS ── */
+window.prevChannel = function(e) {
+  if (e) e.stopPropagation();
+  var idx = (curIdx - 1 + CHANNELS.length) % CHANNELS.length;
+  playChannel(idx);
+  showOverlayControls();
+};
+window.nextChannel = function(e) {
+  if (e) e.stopPropagation();
+  var idx = (curIdx + 1) % CHANNELS.length;
+  playChannel(idx);
+  showOverlayControls();
+};
+
+/* ── ESPELHAR TELA (Presentation API / Screen Cast nativo) ── */
+window.mirrorScreen = function() {
+  // Tenta Presentation API (funciona em TVs com Chromecast/WiDi/Miracast via Chrome)
+  if (navigator.presentation && navigator.presentation.defaultRequest) {
+    navigator.presentation.defaultRequest.start().catch(function(){});
+    return;
+  }
+  // Tenta requestPictureInPicture no video
+  var vid = document.getElementById("video");
+  if (document.pictureInPictureEnabled && !document.pictureInPictureElement) {
+    vid.requestPictureInPicture().catch(function(){});
+    showToast("Picture-in-Picture ativado");
+    return;
+  }
+  if (document.pictureInPictureElement) {
+    document.exitPictureInPicture();
+    return;
+  }
+  // Fallback: compartilha a URL via Web Share API
+  var ch = CHANNELS[curIdx];
+  if (navigator.share) {
+    navigator.share({
+      title: ch.name + " - Ao Vivo",
+      url: ch.url
+    }).catch(function(){});
+  } else {
+    showToast("Use o menu Cast do seu navegador para transmitir");
+  }
+};
+
+/* ── CAST / TRANSMITIR ── */
+var castSession = null;
+
+window.castToTV = function() {
+  var modal = document.getElementById("castModal");
+  modal.style.display = "flex";
+  showOverlayControls();
+  // Tenta inicializar Google Cast se disponível
+  initGoogleCast();
+};
+
+window.closeCast = function() {
+  document.getElementById("castModal").style.display = "none";
+};
+
+// Fecha modal clicando fora
+document.getElementById("castModal").addEventListener("click", function(e) {
+  if (e.target === this) closeCast();
+});
+
+function getCurrentStreamUrl() {
+  return CHANNELS[curIdx].url;
+}
+
+// ── GOOGLE CAST (Chromecast / Android TV) ──
+function initGoogleCast() {
+  if (typeof chrome !== "undefined" && chrome.cast && chrome.cast.isAvailable) {
+    document.getElementById("castGoogleStatus").textContent = "Disponível";
+    document.getElementById("castGoogleStatus").style.color = "#4caf50";
+  } else {
+    // Tenta carregar SDK do Cast
+    if (!document.getElementById("castScript")) {
+      var s = document.createElement("script");
+      s.id = "castScript";
+      s.src = "https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1";
+      s.onload = function() {
+        window.__onGCastApiAvailable = function(isAvailable) {
+          if (isAvailable) {
+            document.getElementById("castGoogleStatus").textContent = "Pronto";
+            document.getElementById("castGoogleStatus").style.color = "#4caf50";
+          }
+        };
+      };
+      document.head.appendChild(s);
+    }
+  }
+}
+
+window.castGoogle = function() {
+  // Tenta usar Cast API nativa
+  if (typeof cast !== "undefined" && cast.framework) {
+    var ctx = cast.framework.CastContext.getInstance();
+    ctx.requestSession().then(function() {
+      var session = ctx.getCurrentSession();
+      var mediaInfo = new chrome.cast.media.MediaInfo(getCurrentStreamUrl(), "application/x-mpegURL");
+      var request = new chrome.cast.media.LoadRequest(mediaInfo);
+      session.loadMedia(request).then(function() {
+        showToast("Transmitindo para TV!");
+        closeCast();
+      }).catch(function(e) { showToast("Erro ao transmitir: "+e); });
+    }).catch(function() { showToast("Nenhum dispositivo Cast encontrado"); });
+  } else {
+    // Fallback: instrução manual
+    showToast("Abra o menu do Chrome > Transmitir");
+    closeCast();
+    // Tenta abrir menu de cast do navegador
+    if (navigator.presentation && navigator.presentation.requestSession) {
+      navigator.presentation.requestSession(new PresentationRequest([getCurrentStreamUrl()]));
+    }
+  }
+};
+
+// ── AIRPLAY (Safari / iOS) ──
+window.castAirPlay = function() {
+  var vid = document.getElementById("video");
+  if (vid.webkitShowPlaybackTargetPicker) {
+    vid.webkitShowPlaybackTargetPicker();
+    closeCast();
+  } else {
+    showToast("AirPlay não disponível neste navegador");
+  }
+};
+
+// ── COMPARTILHAR LINK DO STREAM ──
+window.shareStream = function() {
+  var ch = CHANNELS[curIdx];
+  var url = ch.url;
+  if (navigator.share) {
+    navigator.share({
+      title: ch.name + " - Ao Vivo",
+      text: "Assistindo " + ch.name + " ao vivo",
+      url: url
+    }).then(function() { closeCast(); })
+      .catch(function() {});
+  } else {
+    // Fallback: copia para área de transferência
+    navigator.clipboard.writeText(url).then(function() {
+      showToast("Link copiado! Cole no VLC ou outro player");
+      closeCast();
+    }).catch(function() {
+      showToast("Link: " + url);
+    });
+  }
+};
+
+// ── ABRIR NO VLC ──
+window.openVLC = function() {
+  var url = getCurrentStreamUrl();
+  // URI scheme do VLC para Android/iOS
+  var vlcUri = "vlc://" + url.replace("https://","").replace("http://","");
+  window.location.href = vlcUri;
+  closeCast();
+  setTimeout(function() {
+    // Se VLC não abriu, mostra o link
+    showToast("Se o VLC não abriu, copie o link em Compartilhar");
+  }, 1500);
+};
+
+/* ── PLAYER CONTROLS ── */
+window.togglePlay = function() {
+  var v = document.getElementById("video");
+  if (v.paused) { v.play(); document.getElementById("playBtn").innerHTML="&#9646;&#9646;"; showToast("Reproduzindo"); }
+  else { v.pause(); document.getElementById("playBtn").innerHTML="&#9654;"; showToast("Pausado"); }
+};
+window.toggleMute = function() {
+  var v = document.getElementById("video");
+  v.muted = !v.muted;
+  document.getElementById("muteBtn").innerHTML = v.muted ? "&#128263;" : "&#128266;";
+  showToast(v.muted ? "Mudo" : "Som ligado");
+};
+window.setVolume = function(val) {
+  var v = document.getElementById("video");
+  v.volume = parseFloat(val);
+  v.muted = parseFloat(val) === 0;
+  document.getElementById("muteBtn").innerHTML = parseFloat(val) === 0 ? "&#128263;" : "&#128266;";
+};
+window.toggleFS = function() {
+  var w = document.getElementById("playerWrap");
+  if (!document.fullscreenElement) {
+    if (w.requestFullscreen) w.requestFullscreen();
+    else if (w.webkitRequestFullscreen) w.webkitRequestFullscreen();
+  } else {
+    if (document.exitFullscreen) document.exitFullscreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  }
+};
+
+document.getElementById("video").addEventListener("playing", function(){ document.getElementById("playBtn").innerHTML="&#9646;&#9646;"; });
+document.getElementById("video").addEventListener("pause",   function(){ document.getElementById("playBtn").innerHTML="&#9654;"; });
+
+function showToast(msg) {
+  var el = document.getElementById("toast");
+  el.textContent = msg; el.classList.add("show");
+  clearTimeout(el._t);
+  el._t = setTimeout(function(){ el.classList.remove("show"); }, 1800);
+}
+
+/* ── INIT ── */
+
+
+// ── WEB VIDEO CAST ──
+window.castWebVideoCast = function() {
+  var ch = CHANNELS[curIdx];
+  var url = ch.url;
+  closeCast();
+
+  if (navigator.share) {
+    navigator.share({
+      title: ch.name + " - Ao Vivo",
+      text: url,
+      url: url
+    }).catch(function(e) {
+      if (e.name !== "AbortError") doCopyAndOpen(url);
+    });
+    return;
+  }
+  doCopyAndOpen(url);
+};
+
+function doCopyAndOpen(url) {
+  var ta = document.createElement("textarea");
+  ta.value = url;
+  ta.style.cssText = "position:fixed;opacity:0;top:0;left:0;width:1px;height:1px;";
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try { document.execCommand("copy"); } catch(e) {}
+  document.body.removeChild(ta);
+  showToast("URL copiada! Abra o Web Video Cast e cole na barra de navegacao");
+}
+
+
+/* ══ AUTO-ATUALIZAÇÃO DE TOKENS ══════════════════════════════ */
+var _TAPI = "https://app.megafrixapi.com/get_token_channel.php";
+var _TCACHE = "mf_tok_v2";
+var _TTTL = 2*60*60*1000;
+
+function _slugFromUrl(u){var m=u&&u.match(/\/([^\/]+)\.m3u8/);return m?m[1]:null;}
+
+function _fetchTok(slug,idx){
+  return fetch(_TAPI+"?channel="+slug,{headers:{
+    "User-Agent":"Mozilla/5.0 (Linux; Android 11; 220333QL Build/RKQ1.211001.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/145.0.7632.162 Mobile Safari/537.36",
+    "Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "x-requested-with":"site.megaflixapp",
+    "referer":"https://megaflix.lat/",
+    "accept-language":"pt-BR,pt;q=0.9"
+  }})
+  .then(function(r){return r.text();})
+  .then(function(t){
+    // Padrão principal: URL fazoeli
+    var m=t.match(/https?:\/\/canaiss\.fazoeli\.co\.za\/token\/[a-f0-9]+\/[^\s"'<>&]+\.m3u8/);
+    // Fallback: stream=URL
+    if(!m){var w=t.match(/stream=(https?:\/\/[^\s"'<>&]+\.m3u8)/);
+      if(w){try{m=[decodeURIComponent(w[1])];}catch(e){m=[w[1]];}}}
+    // Fallback 2: qualquer m3u8 na resposta
+    if(!m){var a=t.match(/https?:\/\/[^\s"'<>&]+\.m3u8[^\s"'<>&]*/);if(a)m=a;}
+    if(m&&m[0]){CHANNELS[idx].url=m[0];return true;}
+    return false;
+  }).catch(function(){return false;});
+}
+
+function _refreshToks(){
+  var el=document.getElementById("tokenStatus"),done=0,tot=CHANNELS.length,bs=5;
+  function run(s){
+    if(s>=tot){_saveTC();if(el){el.textContent="✓ "+done+" canais";el.style.color="#4caf50";}setTimeout(function(){if(el)el.textContent="";},4000);return;}
+    var ps=[];
+    for(var i=s;i<Math.min(s+bs,tot);i++){(function(idx){
+      var slug=CHANNELS[idx].id||_slugFromUrl(CHANNELS[idx].url);
+      ps.push(_fetchTok(slug,idx).then(function(ok){if(ok)done++;if(el)el.textContent="↻ "+done+"/"+tot;}));
+    })(i);}
+    Promise.all(ps).then(function(){setTimeout(function(){run(s+bs);},250);});
+  }
+  if(el){el.textContent="↻ atualizando...";el.style.color="var(--muted)";}
+  run(0);
+}
+
+function _saveTC(){try{localStorage.setItem(_TCACHE,JSON.stringify({ts:Date.now(),tokens:CHANNELS.map(function(c){return{id:c.id,url:c.url};})}));}catch(e){}}
+
+function _loadTC(){
+  try{
+    var raw=localStorage.getItem(_TCACHE);if(!raw)return false;
+    var c=JSON.parse(raw);if(!c||!c.ts||Date.now()-c.ts>_TTTL)return false;
+    var map={};c.tokens.forEach(function(t){map[t.id]=t.url;});
+    CHANNELS.forEach(function(ch){if(map[ch.id])ch.url=map[ch.id];});
+    var age=Math.round((Date.now()-c.ts)/60000);
+    var el=document.getElementById("tokenStatus");
+    if(el){el.textContent="cache "+age+"min";el.style.color="var(--muted)";}
+    setTimeout(function(){var e=document.getElementById("tokenStatus");if(e)e.textContent="";},3000);
+    return true;
+  }catch(e){return false;}
+}
+
+function initTokenRefresh(){
+  // Carrega cache para ter algo imediato
+  _loadTC();
+  // SEMPRE busca tokens frescos em background ao abrir
+  _refreshToks();
+  // Renova a cada 2h
+  setInterval(_refreshToks,_TTTL);
+}
+
+/* ══ CONTROLE REMOTO LG ════════════════════════════════════ */
+document.addEventListener("keydown", function(e) {
+  var k = e.keyCode;
+  if(k===37||k===38||k===39||k===40||k===33||k===34||k===227||k===228){
+    e.preventDefault(); e.stopPropagation();
+  }
+  if(k===39||k===228||k===427||k===33||k===175||k===85){
+    nextChannel(); showOverlayControls();
+  }
+  else if(k===37||k===227||k===428||k===34||k===174||k===86){
+    prevChannel(); showOverlayControls();
+  }
+  else if(k===38||k===447){
+    var v=document.getElementById("video"); if(v)v.volume=Math.min(1,(v.volume||0)+0.1);
+    showOverlayControls();
+  }
+  else if(k===40||k===448){
+    var v=document.getElementById("video"); if(v)v.volume=Math.max(0,(v.volume||1)-0.1);
+    showOverlayControls();
+  }
+  else if(k===13){
+    e.preventDefault();
+    var ov=document.getElementById("playerOverlay");
+    if(ov&&ov.classList.contains("visible")) togglePlay();
+    else showOverlayControls();
+  }
+  else if(k===461||k===8){
+    e.preventDefault();
+    var m=document.getElementById("chMenu");
+    if(m&&m.classList.contains("open")) toggleMenu();
+    else showOverlayControls();
+  }
+  else if(k===415){var v=document.getElementById("video");if(v)v.play().catch(function(){});}
+  else if(k===19){var v=document.getElementById("video");if(v)v.pause();}
+  else if(k===403||k===112){toggleMenu();}
+  else if(k===404||k===113){toggleFS();}
+  else if(k===405||k===114){nextChannel(); showOverlayControls();}
+  else if(k===406||k===115){prevChannel(); showOverlayControls();}
+  else if(k>=48&&k<=57){_digCh(k-48);}
+  else if(k!==0&&k!==255){showToast("key="+k);}
+}, true);
+
+var _dcB="", _dcT=null;
+function _digCh(d){
+  clearTimeout(_dcT); _dcB+=String(d);
+  showToast("Canal: "+_dcB);
+  _dcT=setTimeout(function(){
+    var num=parseInt(_dcB); _dcB="";
+    var idx=CHANNELS.findIndex(function(c){return parseInt(c.num)===num;});
+    if(idx!==-1) playChannel(idx); else showToast("Canal "+num+" nao encontrado");
+  },1500);
+}
+
+document.body.setAttribute("tabindex","0");
+document.body.focus();
+
+window.addEventListener("load", function() {
+  initTokenRefresh();
+  playChannel(0);
+  showOverlayControls();
+});
+
+})();
+</script>
+</body>
+</html>
