@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -160,6 +161,82 @@
     /* TOAST */
     .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(12px);background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:9px 16px;font-size:13px;color:var(--text);opacity:0;transition:all .28s;pointer-events:none;white-space:nowrap;z-index:999;}
     .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+
+    /* ══ TV / WEBOS ══════════════════════════════════════════ */
+    @media (min-width:1280px) {
+      :root{ --menu-w:380px; }
+
+      /* Player ocupa tela toda */
+      .app{ display:block !important; padding:0 !important; }
+      .player-zone{ width:100%; }
+      .player-wrap{ height:100vh; }
+      #video{ height:100vh; object-fit:contain; }
+
+      /* Header maior */
+      header{ height:64px; padding:0 32px; }
+      .app-logo{ font-size:28px; letter-spacing:6px; }
+      .now-ch-badge{ font-size:18px; max-width:400px; }
+
+      /* Controles MUITO maiores para controle remoto */
+      .ctrl-btn{
+        width:72px !important; height:72px !important;
+        font-size:26px !important;
+        border-radius:16px !important;
+        border-width:2px !important;
+      }
+      .ctrl-btn:focus{
+        outline:4px solid var(--yellow) !important;
+        background:var(--red) !important;
+        transform:scale(1.15) !important;
+      }
+      .vol-slider{ width:120px !important; height:8px !important; }
+      .vol-slider::-webkit-slider-thumb{ width:22px !important; height:22px !important; }
+      .hd-tag{ font-size:14px !important; padding:5px 12px !important; }
+
+      /* Setas de canal maiores */
+      .nav-arrow{
+        width:80px !important; height:80px !important;
+        font-size:36px !important;
+        border-width:2px !important;
+      }
+      .nav-arrow:focus{
+        outline:4px solid var(--yellow) !important;
+        background:var(--red) !important;
+      }
+      .nav-prev{ left:24px !important; }
+      .nav-next{ right:24px !important; }
+
+      /* Banner de canal maior */
+      .ch-banner{
+        padding:12px 28px !important;
+        border-radius:16px !important;
+        top:24px !important;
+      }
+      .ch-banner-num{ font-size:36px !important; }
+      .ch-banner-name{ font-size:32px !important; }
+      .ch-banner-sep{ height:40px !important; margin:0 4px !important; }
+
+      /* Menu lateral maior */
+      .ch-menu{ width:var(--menu-w) !important; }
+      .ch-menu-hdr{ padding:24px 20px !important; font-size:22px !important; }
+      .ch-item{ padding:16px 20px !important; font-size:16px !important; }
+      .ch-item-num{ font-size:13px !important; }
+
+      /* Esconde info de canal abaixo (desnecessária na TV) */
+      .channel-info{ display:none !important; }
+
+      /* Overlay sempre visível na TV (sem hover) */
+      .player-overlay{ opacity:1 !important; }
+
+      /* Controles na parte inferior */
+      .controls{ padding:16px 24px !important; gap:16px !important; }
+    }
+
+    /* Foco visível para navegação por controle remoto */
+    *:focus{ outline:3px solid var(--yellow); outline-offset:3px; }
+    *:focus:not(:focus-visible){ outline:none; }
+    button:focus-visible{ outline:4px solid var(--yellow) !important; }
 
     @media(max-width:680px){
       .app{grid-template-columns:1fr;padding-bottom:16px;}
@@ -1234,13 +1311,16 @@ function showOverlayControls() {
   ov.classList.add("visible");
   overlayVisible = true;
   clearTimeout(hideTimer);
-  // Mostra o banner do canal junto com os controles
   var ch = CHANNELS[curIdx];
   if (ch) showChannelBanner(ch);
+  // TV grande: esconde após 8s (mais tempo para navegar com controle)
+  var delay = window.innerWidth >= 1280 ? 8000 : 5000;
   hideTimer = setTimeout(function() {
+    // Na TV, mantém overlay sempre visível
+    if (window.innerWidth >= 1280) return;
     ov.classList.remove("visible");
     overlayVisible = false;
-  }, 5000);
+  }, delay);
 }
 
 function hideOverlayControls() {
@@ -1497,8 +1577,87 @@ function doCopyAndOpen(url) {
 }
 
 
+/* ── CONTROLE REMOTO LG WEBOS ── */
+document.addEventListener("keydown", function(e) {
+  var key = e.keyCode || e.which;
+
+  // Setas direcionais
+  if (key === 39 || key === 228) { // Direita / CH+
+    e.preventDefault();
+    nextChannel();
+  } else if (key === 37 || key === 227) { // Esquerda / CH-
+    e.preventDefault();
+    prevChannel();
+  } else if (key === 38) { // Cima — volume+
+    e.preventDefault();
+    var vid = document.getElementById("video");
+    if (vid) vid.volume = Math.min(1, vid.volume + 0.1);
+    showOverlayControls();
+  } else if (key === 40) { // Baixo — volume-
+    e.preventDefault();
+    var vid = document.getElementById("video");
+    if (vid) vid.volume = Math.max(0, vid.volume - 0.1);
+    showOverlayControls();
+  } else if (key === 13 || key === 32) { // OK / Enter / Espaço
+    e.preventDefault();
+    var overlay = document.getElementById("playerOverlay");
+    if (overlay && overlay.classList.contains("visible")) {
+      togglePlay();
+    } else {
+      showOverlayControls();
+    }
+  } else if (key === 461 || key === 8) { // Voltar (LG) / Backspace
+    e.preventDefault();
+    var menuOpen = document.getElementById("chMenu").classList.contains("open");
+    if (menuOpen) {
+      toggleMenu();
+    } else {
+      showOverlayControls();
+    }
+  } else if (key === 19) { // PAUSE
+    e.preventDefault();
+    togglePlay();
+  } else if (key === 415) { // PLAY
+    e.preventDefault();
+    var vid = document.getElementById("video");
+    if (vid) vid.play().catch(function(){});
+  } else if (key === 403) { // Botão vermelho
+    toggleMenu();
+  } else if (key === 404) { // Botão verde
+    toggleFS();
+  } else if (key === 405) { // Botão amarelo
+    nextChannel();
+  } else if (key === 406) { // Botão azul
+    prevChannel();
+  }
+  // Números 0-9 para digitar canal
+  else if (key >= 48 && key <= 57) {
+    var num = key - 48;
+    digitChannel(num);
+  }
+});
+
+// Digitação de canal por número (tipo TV)
+var _chDigits = "";
+var _chTimer  = null;
+function digitChannel(d) {
+  clearTimeout(_chTimer);
+  _chDigits += String(d);
+  showToast("Canal: " + _chDigits);
+  _chTimer = setTimeout(function() {
+    var num = parseInt(_chDigits);
+    _chDigits = "";
+    var idx = CHANNELS.findIndex(function(c){ return parseInt(c.num) === num; });
+    if (idx !== -1) playChannel(idx);
+    else showToast("Canal " + num + " não encontrado");
+  }, 1500);
+}
+
+/* Garante foco no body para receber teclas na TV */
+document.body.setAttribute("tabindex", "0");
+document.body.focus();
+
 })();
 </script>
 </body>
 </html>
-
